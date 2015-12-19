@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.TreeSet;
 
 public class RPWaitingSocket implements IWaitingSocket {
@@ -12,7 +14,7 @@ public class RPWaitingSocket implements IWaitingSocket {
 	private static final int SEGMENT_MAX_SIZE = 4096;
 	
 	private DatagramSocket _socket;
-	private TreeSet<RPTransactionalSocket> _connections;
+	private ArrayList<RPTransactionalSocket> _connections;
 	private DatagramPacket _packet;
 	private byte[] _buffer;
 	private boolean _closed = false;
@@ -20,19 +22,24 @@ public class RPWaitingSocket implements IWaitingSocket {
 	
 	private RPWaitingSocket(int port, InetAddress address) throws IOException{
 		_socket = new DatagramSocket(port, address);
-		_connections = new TreeSet<>();
+		_socket.setBroadcast(true);
+		_connections = new ArrayList<>();
 		_buffer = new byte[SEGMENT_MAX_SIZE];
 		_packet = new DatagramPacket(_buffer, SEGMENT_MAX_SIZE);
 	}
 	
-	public static IWaitingSocket createIWaitingSocket(int port, InetAddress address) throws IOException{
+	public static RPWaitingSocket createIWaitingSocket(int port, InetAddress address) throws IOException{
 		return new RPWaitingSocket(port, address);
 	}
 	
 	@Override
 	public ITransactionalSocket listen() throws IOException {
+		System.out.println("Waiting for client...");
 		_socket.receive(_packet);
-		RPTransactionalSocket connection = new RPTransactionalSocket(_packet.getPort(), _packet.getAddress());
+		System.out.println("Client connected from:" + _packet.getAddress().getHostAddress() + ":" + _packet.getPort() );
+		System.out.println("Msg: " + new String(_packet.getData(), Charset.defaultCharset()));
+		RPTransactionalSocket connection = new RPTransactionalSocket();
+		System.out.println("Creating response:");
 		connection.connect(_packet.getSocketAddress());
 		_connections.add(connection);
 		return connection;
@@ -57,6 +64,7 @@ public class RPWaitingSocket implements IWaitingSocket {
 	}
 	
 	public void start() throws IOException{
+		System.out.println("Creating server at: " + _socket.getLocalAddress() + ":" + _socket.getLocalPort());
 		new Thread(new Runnable() {
 			@Override
 			public void run() {

@@ -17,20 +17,37 @@ public class RPTransactionalSocket implements ITransactionalSocket {
 	private boolean _transaction;
 	private int _timeout = 10000;
 	
-	public RPTransactionalSocket(int remotePort, InetAddress remoteAddress) throws IOException {
-		_local = new DatagramSocket(remotePort, remoteAddress);
+	public RPTransactionalSocket() throws IOException{
+		_local = new DatagramSocket();
 		_local.setSoTimeout(_timeout);
 		_buffer = new byte[SEGMENT_MAX_SIZE];
 		_packet = new DatagramPacket(_buffer, SEGMENT_MAX_SIZE);
 		_transaction = false;
 	}
 	
-	public static ITransactionalSocket createTransactionalSocket(int remotePort, InetAddress remoteAddress, int localPort, InetAddress localAddress) {
+	public RPTransactionalSocket(int localPort, InetAddress localAddress) throws IOException {
+		_local = new DatagramSocket(localPort, localAddress);
+		_local.setSoTimeout(_timeout);
+		_buffer = new byte[SEGMENT_MAX_SIZE];
+		_packet = new DatagramPacket(_buffer, SEGMENT_MAX_SIZE);
+		_transaction = false;
+	}
+	
+	public static RPTransactionalSocket createTransactionalSocket(int remotePort, InetAddress remoteAddress, int localPort, InetAddress localAddress) {
 		RPTransactionalSocket result = null;
 		try {
-			result = new RPTransactionalSocket(remotePort, remoteAddress);
+			System.out.println("Creating client at: " + localAddress.getHostAddress() + ":" + localPort);
+			result = new RPTransactionalSocket(localPort, localAddress);
+			System.out.println("Sending packet to: " + remoteAddress + ":" + remotePort);
+			result._packet.setData("Hello".getBytes());
+			result._packet.setAddress(remoteAddress);
+			result._packet.setPort(remotePort);
 			result._local.send(result._packet);
+			
+			System.out.println("Waiting for respond: " + remoteAddress + ":" + remotePort);
 			result._local.receive(result._packet);
+			System.out.println("Recived: " + result._packet.getData().toString());
+			System.out.println("Connecting to: " + result._packet.getAddress().getHostAddress() + ":" + result._packet.getPort());
 			result._local.connect(result._packet.getSocketAddress());
 		} catch (IOException e) {
 			System.out.println(_pre + "Error while creating transactional socket");
@@ -55,12 +72,14 @@ public class RPTransactionalSocket implements ITransactionalSocket {
 	public void write(byte[] buff) {
 		if(_transaction) {
 			boolean sent = false;
-			while(sent) {
+			while(!sent) {
 				_packet.setData(buff);
 				try {
 					_local.send(_packet);
+					sent = true;
 				} catch (IOException e) {
 					System.out.println(_pre + "Timeout, retrying...");
+					write(buff);
 				}
 			}
 		}
@@ -117,8 +136,7 @@ public class RPTransactionalSocket implements ITransactionalSocket {
 
 	@Override
 	public void setSegmentSize(int size) {
-		// TODO Auto-generated method stub
-		
+		System.out.println("Implemented as constant");
 	}
 
 	@Override
@@ -147,7 +165,12 @@ public class RPTransactionalSocket implements ITransactionalSocket {
 	}
 	
 	public void connect(SocketAddress addr) throws IOException {
-		if(!_local.isConnected()) _local.connect(addr);
+		if(!_local.isConnected()) {
+			_packet.setSocketAddress(addr);
+			_packet.setData("Ack".getBytes());
+			_local.send(_packet);
+			_local.connect(addr);
+		}
 	}
 
 }
